@@ -39,6 +39,53 @@ Outputs land in:
 /root/ComfyUI/output/
 ```
 
+## Repo structure
+
+```text
+scripts/
+  startup-script.sh          # DigitalOcean user-data bootstrap
+  install-training-stack.sh  # HF diffusers LoRA training setup
+research/
+  project-brief.md           # hackathon plan and architecture
+  research-log.md            # infrastructure research and findings
+  amd-diffusion-models-course-notes.md
+training/
+  datasets/                  # image sets for LoRA training (gitignored)
+  outputs/                   # trained LoRA artifacts (gitignored)
+  logs/                      # training logs
+internal/
+  AMD Feedback.md            # platform feedback (not in git)
+outputs/                     # generated images (gitignored)
+```
+
+## Use the ComfyUI API
+
+ComfyUI generation uses:
+
+```bash
+POST http://127.0.0.1:8188/prompt
+```
+
+## Training LoRA on AMD MI300X
+
+After the droplet boots:
+
+```bash
+# SSH in and install the training stack
+/root/nemoflix/scripts/install-training-stack.sh
+```
+
+This installs Hugging Face `diffusers` and sets up the training workspace at `/root/nemoflix-training/`.
+
+### Run training
+
+```bash
+cd /root/nemoflix-training
+./train-lora-sdxl.sh datasets/sample my-lora
+```
+
+Copy the resulting `.safetensors` to `/root/ComfyUI/models/loras/` and use it in ComfyUI.
+
 ## Use the ComfyUI API
 
 ComfyUI generation uses:
