@@ -18,3 +18,6 @@ venv/
 
 # Logs
 *.log
+
+# Internal notes not intended for public repo
+internal/
