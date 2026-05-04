@@ -1,0 +1,20 @@
+# Generated outputs
+outputs/
+ComfyUI_*.png
+ComfyUI_*.jpg
+ComfyUI_*.jpeg
+ComfyUI_*.webp
+
+# Local configuration
+configs/
+.env
+.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Logs
+*.log
