@@ -22,7 +22,7 @@ $APT_GET install -y git
 $APT_GET install -y python3-pip
 $APT_GET install -y python3.12-venv
 
-# wget is required to download the test checkpoint.
+# wget is required by optional stack install scripts.
 $APT_GET install -y wget
 
 # htop is optional, but useful for manual droplet debugging.
@@ -53,12 +53,15 @@ echo "=== Installing PyTorch for ROCm ==="
 echo "=== PyTorch GPU Check ==="
 "$PYTHON_BIN" -c "import torch; print('PyTorch:', torch.__version__); print('ROCm available:', torch.cuda.is_available()); print('GPU:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'None')"
 
-# Clone the project repo. This is the application layer that will own future setup/runtime logic.
+# Clone the project repo. This is the application layer that owns the agent-native API wrapper.
 echo "=== Cloning Nemoflix repo ==="
 git clone --depth 1 "$APP_REPO_URL" "$APP_DIR"
 
-# Application install step intentionally comes later when the repo has a defined app entrypoint.
-# Today this clone proves the deployment path includes our repository.
+# Install the agent-native API wrapper. This service talks to ComfyUI's native
+# HTTP API and keeps humans out of the ComfyUI browser UI.
+if [ -f "$APP_DIR/requirements.txt" ]; then
+    "$PYTHON_BIN" -m pip install -r "$APP_DIR/requirements.txt"
+fi
 
 # Install ComfyUI.
 echo "=== Installing ComfyUI ==="
@@ -75,14 +78,6 @@ cd /root/ComfyUI
 
 # Copy official example for testing.
 cp /root/ComfyUI/script_examples/basic_api_example.py /root/test_comfyui.py
-
-# Download test model before starting service.
-mkdir -p /root/ComfyUI/models/checkpoints
-cd /root/ComfyUI/models/checkpoints
-echo "Downloading SD 1.5 test checkpoint..."
-wget -q "https://huggingface.co/runwayml/stable-diffusion-v1-5/resolve/main/v1-5-pruned-emaonly.safetensors" -O v1-5-pruned-emaonly.safetensors
-test -s v1-5-pruned-emaonly.safetensors
-ls -lh v1-5-pruned-emaonly.safetensors
 
 # Create ComfyUI systemd service on the host.
 cat > /etc/systemd/system/comfyui.service << EOF
@@ -108,8 +103,35 @@ systemctl daemon-reload
 systemctl enable comfyui.service
 systemctl start comfyui.service
 
+# Create a small product/API layer over ComfyUI's execution API.
+cat > /etc/systemd/system/nemoflix-amd-api.service << EOF
+[Unit]
+Description=Nemoflix AMD Agent API
+After=network-online.target comfyui.service
+Wants=network-online.target comfyui.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=$APP_DIR
+Environment="PATH=/root/comfyui-venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Environment="PYTHONPATH=$APP_DIR/app"
+Environment="COMFY_URL=http://127.0.0.1:8188"
+ExecStart=$PYTHON_BIN -m uvicorn nemoflix_amd.api:app --host 0.0.0.0 --port 8190
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable nemoflix-amd-api.service
+systemctl start nemoflix-amd-api.service
+
 # Show service status in log.
 systemctl --no-pager --full status comfyui.service
+systemctl --no-pager --full status nemoflix-amd-api.service
 
 # Verify API from the host.
 echo "=== Waiting for ComfyUI API ==="
@@ -121,8 +143,7 @@ for i in {1..60}; do
     sleep 5
 done
 curl -sS --max-time 5 http://127.0.0.1:8188/system_stats
-
-echo "=== Queueing ComfyUI test generation ==="
-"$PYTHON_BIN" /root/test_comfyui.py
+curl -sS --max-time 5 http://127.0.0.1:8190/api/health
 
 echo "=== Setup Complete ==="
+echo "Install Wan 2.2 video stack: $APP_DIR/scripts/install-video-stack.sh"
