@@ -53,9 +53,14 @@ echo "=== Installing PyTorch for ROCm ==="
 echo "=== PyTorch GPU Check ==="
 "$PYTHON_BIN" -c "import torch; print('PyTorch:', torch.__version__); print('ROCm available:', torch.cuda.is_available()); print('GPU:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'None')"
 
-# Clone the project repo. This is the application layer that owns the agent-native API wrapper.
-echo "=== Cloning Nemoflix repo ==="
-git clone --depth 1 "$APP_REPO_URL" "$APP_DIR"
+# Clone or update the project repo. This is the application layer that owns the agent-native API wrapper.
+echo "=== Cloning/updating Nemoflix repo ==="
+if [ -d "$APP_DIR/.git" ]; then
+    git -C "$APP_DIR" fetch --depth 1 origin main
+    git -C "$APP_DIR" reset --hard origin/main
+else
+    git clone --depth 1 "$APP_REPO_URL" "$APP_DIR"
+fi
 
 # Install the agent-native API wrapper. This service talks to ComfyUI's native
 # HTTP API and keeps humans out of the ComfyUI browser UI.
