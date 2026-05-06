@@ -253,3 +253,78 @@ async def job(prompt_id: str) -> JobStatusResponse:
         status = "completed" if outputs else ("queued_or_running" if history == {} else "unknown")
         progress = 100.0 if outputs else None
         return JobStatusResponse(ok=True, prompt_id=prompt_id, status=status, progress=progress, outputs=outputs, raw=history)
+
+
+import os
+from fastapi.responses import FileResponse
+
+_OUTPUT_DIR = Path("/root/ComfyUI/output")
+_ALLOW_EXT = {".png", ".jpg", ".jpeg", ".webp", ".mp4", ".webm", ".gif"}
+
+
+@app.get("/api/listing")
+async def listing(dir: str = "", offset: int = 0, limit: int = 60) -> dict[str, Any]:
+    base = _OUTPUT_DIR / dir if dir else _OUTPUT_DIR
+    if not str(base.resolve()).startswith(str(_OUTPUT_DIR.resolve())):
+        raise HTTPException(status_code=400, detail="Invalid dir")
+    items: list[dict[str, Any]] = []
+    total = 0
+
+    def scan_directory(scan_base: Path, rel_prefix: str = ""):
+        nonlocal total
+        if not scan_base.is_dir():
+            return
+        for entry in scan_base.iterdir():
+            if entry.name.startswith("."):
+                continue
+            if entry.is_dir():
+                new_prefix = f"{rel_prefix}/{entry.name}" if rel_prefix else entry.name
+                scan_directory(entry, new_prefix)
+            elif entry.is_file():
+                ext = entry.suffix.lower()
+                if ext not in _ALLOW_EXT:
+                    continue
+                total += 1
+                if len(items) >= limit:
+                    continue
+                w, h = 0, 0
+                if ext in {".mp4", ".webm"}:
+                    w, h = 1280, 720
+                else:
+                    try:
+                        from PIL import Image
+                        with Image.open(entry) as im:
+                            w, h = im.width, im.height
+                    except Exception:
+                        pass
+                rel = f"{rel_prefix}/{entry.name}" if rel_prefix else entry.name
+                item: dict[str, Any] = {
+                    "name": entry.name,
+                    "type": "video" if ext in {".mp4", ".webm", ".gif"} else "image",
+                    "width": w,
+                    "height": h,
+                    "mtime": entry.stat().st_mtime,
+                    "url": f"/media/{rel}",
+                    "thumb": f"/media/{rel}",
+                }
+                items.append(item)
+
+    scan_directory(base)
+    items.sort(key=lambda x: x["mtime"], reverse=True)
+    return {"images": items, "total": total, "offset": offset, "limit": limit}
+
+
+@app.get("/media/{path:path}")
+async def media(path: str) -> FileResponse:
+    target = _OUTPUT_DIR / path
+    if not str(target.resolve()).startswith(str(_OUTPUT_DIR.resolve())):
+        raise HTTPException(status_code=403, detail="Access denied")
+    if not target.is_file():
+        raise HTTPException(status_code=404, detail="Not found")
+    stat = target.stat()
+    etag = f'W/"{stat.st_mtime_ns}-{stat.st_size}"'
+    return FileResponse(
+        target,
+        headers={"Cache-Control": "private, max-age=604800, immutable", "ETag": etag},
+    )
+

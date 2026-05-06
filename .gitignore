@@ -1,3 +1,16 @@
+# Dependencies
+node_modules/
+studio/node_modules/
+
+# Build/cache output
+dist/
+studio/dist/
+.vite/
+studio/.vite/
+*.tsbuildinfo
+studio/vite.config.js
+studio/vite.config.d.ts
+
 # Generated outputs
 outputs/
 ComfyUI_*.png
@@ -5,7 +18,7 @@ ComfyUI_*.jpg
 ComfyUI_*.jpeg
 ComfyUI_*.webp
 
-# Local configuration
+# Local/private configuration
 configs/
 .env
 .env.*
@@ -19,5 +32,10 @@ venv/
 # Logs
 *.log
 
-# Internal notes not intended for public repo
+# Internal/private notes and datasets
 internal/
+private_datasets/
+RodrigoFaceDataset.zip
+
+# OS/editor
+.DS_Store
